@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Entry point for the excalidraw skill. The skill folder only holds sources. On each run this syncs
+# them to a cache folder, installs dependencies there on first use (about 300 MB, kept out of the
+# skill folder so skill scanners never walk node_modules), rebuilds the editor bundle when the
+# sources changed, and runs the CLI.
+set -euo pipefail
+
+src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+app="${EXCALIDRAW_SKILL_APP_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/excalidraw-skill/app}"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "excalidraw: Node.js 22.18 or newer is required (node not found)" >&2
+  exit 1
+fi
+if ! node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=18)?0:1)'; then
+  echo "excalidraw: Node.js 22.18 or newer is required (found $(node --version))" >&2
+  exit 1
+fi
+
+mkdir -p "$app"
+rsync -a --delete \
+  --exclude node_modules --exclude web/dist --exclude .setup.log --exclude excalidraw \
+  "$src/" "$app/"
+
+setup_log="$app/.setup.log"
+if [[ ! -d "$app/node_modules" || "$app/package-lock.json" -nt "$app/node_modules/.package-lock.json" ]]; then
+  echo "excalidraw: installing dependencies into $app (first run, about a minute)..." >&2
+  if ! npm --prefix "$app" ci --no-audit --no-fund >"$setup_log" 2>&1; then
+    echo "excalidraw: npm ci failed; see $setup_log" >&2
+    exit 1
+  fi
+fi
+if [[ ! -f "$app/web/dist/app.js" || -n "$(find "$app/web" -maxdepth 1 -type f -newer "$app/web/dist/app.js" -print -quit)" ]]; then
+  if ! npm --prefix "$app" run build >"$setup_log" 2>&1; then
+    echo "excalidraw: building the editor bundle failed; see $setup_log" >&2
+    exit 1
+  fi
+fi
+
+if [[ "${1:-}" == "selftest" ]]; then
+  exec node --disable-warning=ExperimentalWarning "$app/selftest.ts"
+fi
+if [[ "${1:-}" == "typecheck" ]]; then
+  exec npm --prefix "$app" run -s check
+fi
+exec node --disable-warning=ExperimentalWarning "$app/cli.ts" "$@"
