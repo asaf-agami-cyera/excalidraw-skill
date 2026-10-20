@@ -17,12 +17,18 @@ local editor at `http://127.0.0.1:4517` that auto-saves edits. Nothing is upload
    warnings: partial overlaps between shapes or standalone text, and browser console errors such as
    arrow bindings to missing ids.
 3. Read the PNG and fix what you see: clipped or cramped text, overlaps, low contrast, arrows that
-   miss. Re-render until it's clean. Never open a diagram you haven't looked at.
+   miss. Re-render with `--force` until it's clean. Never open a diagram you haven't looked at.
 4. `~/scripts/excalidraw open <name>` opens the editor in Asaf's default browser. That is a
    visible interruption: do it only when he asked to see the diagram in this session.
 5. When the editor is already open, a re-render shows up there within about a second.
 6. After Asaf edits in the browser, `~/scripts/excalidraw snapshot <name>` re-renders the saved
    scene to PNG so you can see his changes; the `.excalidraw` file holds the element data.
+
+Scenes are shared by every agent, so `render` refuses to replace an existing scene unless you pass
+`--force`. Even with `--force`, it refuses (exit code 3) if the scene changed since the last render
+or snapshot, which usually means Asaf edited it. Then run `snapshot`, look at the PNG, keep his
+changes in your next skeleton, and render again with `--force`. For a new diagram, pick a name no
+existing scene uses (`list`).
 
 Other commands: `list`, `stop` (background server), `serve`. Self-test: `npm run selftest` in
 `~/scripts/excalidraw-local`. After changing `web/`, run `npm run check && npm run build`; after
