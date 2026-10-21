@@ -64,3 +64,11 @@ accepts). The essentials:
 Readable defaults: body text 16 to 18, titles 28 to 32, at least 30px between boxes. Pastel fills
 `#a5d8ff #b2f2bb #ffd8a8 #d0bfff #ffc9c9 #fff3bf #c3fae8 #f1f3f5`; strokes `#4a9eed #22c55e
 #f59e0b #8b5cf6 #ef4444`; grey secondary text `#757575` (nothing lighter on white).
+
+## Useful Diagrams
+Unless told otherwise by the user, the goal is to drive an explanation visually.
+By default, your tendency is to create diagrams that are very verbose, and not visually rich,
+usually it feels like a text response broken down into colorful rectangles connected by arrows.
+
+Think in terms of timelines, subjects, objects, changes, transformations, creating a consistant
+simplified visual language.
