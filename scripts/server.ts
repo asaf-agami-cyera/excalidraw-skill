@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
-import { DIST_DIR, EXCALIDRAW_ASSETS_DIR, PORT, SCENES_DIR, SERVICE_NAME, WEB_DIR, isSceneName, scenePath } from "./config.ts";
+import { DIST_DIR, EXCALIDRAW_ASSETS_DIR, PORT, SCENES_DIR, SERVICE_NAME, WEB_DIR, isSceneName, pngPath, scenePath } from "./config.ts";
+import type { SceneSummary } from "./web/render-api.ts";
 
 const MAX_BODY_BYTES = 50 * 1024 * 1024;
 
@@ -53,11 +54,38 @@ async function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 async function sceneMtime(name: string): Promise<number | null> {
+  return fileMtime(scenePath(name));
+}
+
+async function fileMtime(file: string): Promise<number | null> {
   try {
-    return (await fs.stat(scenePath(name))).mtimeMs;
+    return (await fs.stat(file)).mtimeMs;
   } catch {
     return null;
   }
+}
+
+async function listScenes(): Promise<SceneSummary[]> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(SCENES_DIR);
+  } catch (err) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return [];
+    }
+    throw err;
+  }
+  const names = entries
+    .filter((entry) => entry.endsWith(".excalidraw"))
+    .map((entry) => entry.slice(0, -".excalidraw".length))
+    .filter(isSceneName);
+  const scenes = await Promise.all(
+    names.map(async (name): Promise<SceneSummary | null> => {
+      const mtime = await sceneMtime(name);
+      return mtime === null ? null : { name, mtime, pngMtime: await fileMtime(pngPath(name)) };
+    }),
+  );
+  return scenes.filter((scene) => scene !== null).sort((a, b) => b.mtime - a.mtime);
 }
 
 async function handleScene(req: http.IncomingMessage, res: http.ServerResponse, name: string, suffix: string): Promise<void> {
@@ -67,6 +95,14 @@ async function handleScene(req: http.IncomingMessage, res: http.ServerResponse, 
   }
   if (req.method === "GET" && suffix === "/mtime") {
     sendJson(res, 200, { mtime: await sceneMtime(name) });
+    return;
+  }
+  if (req.method === "GET" && suffix === "/png") {
+    try {
+      send(res, 200, await fs.readFile(pngPath(name)), CONTENT_TYPES[".png"]);
+    } catch {
+      send(res, 404, "not found");
+    }
     return;
   }
   if (req.method === "GET" && suffix === "") {
@@ -123,7 +159,11 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     sendJson(res, 200, { ok: true });
     return;
   }
-  const sceneMatch = /^\/api\/scenes\/([^/]+)(\/mtime)?$/.exec(pathname);
+  if (pathname === "/api/scenes" && req.method === "GET") {
+    sendJson(res, 200, await listScenes());
+    return;
+  }
+  const sceneMatch = /^\/api\/scenes\/([^/]+)(\/mtime|\/png)?$/.exec(pathname);
   if (sceneMatch) {
     await handleScene(req, res, decodeURIComponent(sceneMatch[1] ?? ""), sceneMatch[2] ?? "");
     return;

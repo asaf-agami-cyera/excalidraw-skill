@@ -35,7 +35,8 @@ or snapshot, which usually means the user edited it. Then run `snapshot`, look a
 changes in your next skeleton, and render again with `--force`. For a new diagram, pick a name no
 existing scene uses (`list`).
 
-Other commands: `list`, `stop` (stops the background server), `serve`, `selftest`, `typecheck`.
+Other commands: `list`, `open` with no name (opens the gallery of all scenes at `/`, newest first),
+`stop` (stops the background server), `serve`, `selftest`, `typecheck`.
 After changing `server.ts`, run `excalidraw stop`; the next command starts the new server.
 
 Environment overrides: `EXCALIDRAW_SKILL_PORT`, `EXCALIDRAW_SKILL_DATA_DIR`,

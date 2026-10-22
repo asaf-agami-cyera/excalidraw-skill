@@ -16,7 +16,8 @@ Usage:
                                               render or snapshot.
   excalidraw snapshot <name>                  Re-render the saved scene (including browser edits) to PNG
                                               and mark its current state as seen
-  excalidraw open <name>                      Open the scene in the browser editor (edits auto-save)
+  excalidraw open [<name>]                    Open the scene in the browser editor (edits auto-save), or
+                                              without a name, the gallery of all scenes
   excalidraw list                             List saved scenes
   excalidraw serve                            Run the local server in the foreground
   excalidraw stop                             Stop the background server
@@ -236,13 +237,11 @@ async function main(argv: string[]): Promise<number> {
     }
     case "open": {
       const [name] = args;
-      if (!name) {
-        console.error(USAGE);
-        return 2;
+      if (name) {
+        await fs.access(scenePath(name));
       }
-      await fs.access(scenePath(name));
       await ensureServer();
-      const url = `${BASE_URL}/?scene=${encodeURIComponent(name)}`;
+      const url = name ? `${BASE_URL}/?scene=${encodeURIComponent(name)}` : `${BASE_URL}/`;
       const [opener, ...openerArgs] =
         process.platform === "darwin" ? ["open", url] : process.platform === "win32" ? ["cmd", "/c", "start", "", url] : ["xdg-open", url];
       const child = spawn(opener ?? "open", openerArgs, { stdio: "inherit" });

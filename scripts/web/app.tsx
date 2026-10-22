@@ -10,9 +10,9 @@ import "@excalidraw/excalidraw/index.css";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
-import type { RenderInput, RenderOutput } from "./render-api.ts";
+import type { RenderInput, RenderOutput, SceneSummary } from "./render-api.ts";
 
 const EXPORT_PADDING = 32;
 const EXPORT_SCALE = 2;
@@ -351,6 +351,150 @@ function Editor({ name }: { name: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Scene gallery (the page at / without ?scene=)
+// ---------------------------------------------------------------------------
+
+function isSceneSummary(value: unknown): value is SceneSummary {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.mtime === "number" &&
+    (value.pngMtime === null || typeof value.pngMtime === "number")
+  );
+}
+
+async function fetchSceneList(): Promise<SceneSummary[]> {
+  const res = await fetch("/api/scenes");
+  if (!res.ok) {
+    throw new Error(`could not list scenes: HTTP ${res.status}`);
+  }
+  const body: unknown = await res.json();
+  if (!Array.isArray(body) || !body.every(isSceneSummary)) {
+    throw new Error("unexpected /api/scenes response");
+  }
+  return body;
+}
+
+const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+
+function dayLabel(ms: number): string {
+  const startOfDay = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date()) - startOfDay(new Date(ms))) / 86_400_000);
+  if (days === 0) {
+    return `Today, ${dayFormat.format(ms)}`;
+  }
+  if (days === 1) {
+    return `Yesterday, ${dayFormat.format(ms)}`;
+  }
+  return dayFormat.format(ms);
+}
+
+function groupByDay(scenes: SceneSummary[]): { day: string; scenes: SceneSummary[] }[] {
+  const groups: { day: string; scenes: SceneSummary[] }[] = [];
+  for (const scene of scenes) {
+    const day = dayLabel(scene.mtime);
+    const last = groups.at(-1);
+    if (last && last.day === day) {
+      last.scenes.push(scene);
+    } else {
+      groups.push({ day, scenes: [scene] });
+    }
+  }
+  return groups;
+}
+
+const galleryStyles = {
+  page: { fontFamily: "system-ui, sans-serif", color: "#1e1e1e", background: "#f8f9fa", minHeight: "100%", padding: "32px 40px" },
+  title: { fontSize: 28, fontWeight: 600, margin: "0 0 4px" },
+  subtitle: { color: "#757575", margin: "0 0 24px", fontSize: 14 },
+  day: { fontSize: 15, fontWeight: 600, color: "#495057", margin: "28px 0 12px" },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 },
+  card: {
+    display: "block",
+    background: "#fff",
+    border: "1px solid #dee2e6",
+    borderRadius: 10,
+    overflow: "hidden",
+    textDecoration: "none",
+    color: "inherit",
+  },
+  thumb: { width: "100%", height: 180, objectFit: "contain", background: "#fff", borderBottom: "1px solid #f1f3f5", display: "block" },
+  noThumb: { height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "#757575", fontSize: 13 },
+  meta: { padding: "10px 12px" },
+  name: { fontWeight: 600, fontSize: 14, overflowWrap: "anywhere" },
+  time: { color: "#757575", fontSize: 12, marginTop: 2 },
+} satisfies Record<string, CSSProperties>;
+
+function SceneCard({ scene }: { scene: SceneSummary }) {
+  const stale = scene.pngMtime !== null && scene.pngMtime < scene.mtime;
+  return (
+    <a href={`/?scene=${encodeURIComponent(scene.name)}`} style={galleryStyles.card}>
+      {scene.pngMtime === null ? (
+        <div style={galleryStyles.noThumb}>no preview</div>
+      ) : (
+        <img
+          src={`/api/scenes/${encodeURIComponent(scene.name)}/png?v=${scene.pngMtime}`}
+          alt={scene.name}
+          loading="lazy"
+          style={galleryStyles.thumb}
+        />
+      )}
+      <div style={galleryStyles.meta}>
+        <div style={galleryStyles.name}>{scene.name}</div>
+        <div style={galleryStyles.time}>
+          {timeFormat.format(scene.mtime)}
+          {stale ? " · preview older than last edit" : ""}
+        </div>
+      </div>
+    </a>
+  );
+}
+
+function Gallery() {
+  const [scenes, setScenes] = useState<SceneSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = "Excalidraw scenes";
+    const load = (): void => {
+      fetchSceneList()
+        .then((list) => {
+          setScenes(list);
+          setError(null);
+        })
+        .catch((err: unknown) => setError(String(err)));
+    };
+    load();
+    // Agents add scenes in the background; refresh when the tab comes back into view.
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, []);
+
+  return (
+    <div style={galleryStyles.page}>
+      <h1 style={galleryStyles.title}>Excalidraw scenes</h1>
+      <p style={galleryStyles.subtitle}>
+        {scenes ? `${scenes.length} scenes, most recently changed first` : "Loading…"}
+      </p>
+      {error ? <pre style={{ color: "#b91c1c" }}>{error}</pre> : null}
+      {scenes
+        ? groupByDay(scenes).map((group) => (
+            <section key={group.day}>
+              <h2 style={galleryStyles.day}>{group.day}</h2>
+              <div style={galleryStyles.grid}>
+                {group.scenes.map((scene) => (
+                  <SceneCard key={scene.name} scene={scene} />
+                ))}
+              </div>
+            </section>
+          ))
+        : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 const params = new URLSearchParams(window.location.search);
 if (params.get("mode") === "render") {
@@ -359,8 +503,6 @@ if (params.get("mode") === "render") {
   const rootEl = document.getElementById("root");
   const sceneName = params.get("scene");
   if (rootEl) {
-    createRoot(rootEl).render(
-      sceneName ? <Editor name={sceneName} /> : <p style={{ padding: 24 }}>Open with ?scene=&lt;name&gt;</p>,
-    );
+    createRoot(rootEl).render(sceneName ? <Editor name={sceneName} /> : <Gallery />);
   }
 }
