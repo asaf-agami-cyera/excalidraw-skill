@@ -8,8 +8,14 @@ import {
 } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
-import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawElement, FileId } from "@excalidraw/excalidraw/element/types";
+import type {
+  AppState,
+  BinaryFileData,
+  BinaryFiles,
+  DataURL,
+  ExcalidrawImperativeAPI,
+} from "@excalidraw/excalidraw/types";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import type { RenderInput, RenderOutput, SceneSummary } from "./render-api.ts";
@@ -59,6 +65,48 @@ function outlineScale(shape: ShapeBox, dx: number, dy: number): number {
     return 1 / (ax + ay);
   }
   return 1 / Math.max(ax, ay);
+}
+
+const IMAGE_MIME_TYPES: readonly BinaryFileData["mimeType"][] = [
+  "image/svg+xml",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+];
+
+function isImageMimeType(value: unknown): value is BinaryFileData["mimeType"] {
+  return IMAGE_MIME_TYPES.some((type) => type === value);
+}
+
+function isDataURL(value: unknown): value is DataURL {
+  return typeof value === "string" && value.startsWith("data:");
+}
+
+function isFileId(value: unknown): value is FileId {
+  return typeof value === "string" && value.length > 0;
+}
+
+// Image elements may carry their file inline: {"type":"image", ..., "dataURL", "mimeType"}. Move
+// those into the scene's files, keyed by fileId (default: the element's id).
+function extractInlineFiles(raw: unknown): { elements: unknown; files: BinaryFiles } {
+  const files: BinaryFiles = {};
+  if (!Array.isArray(raw)) {
+    return { elements: raw, files };
+  }
+  const elements = raw.map((el: unknown) => {
+    if (!isRecord(el) || el.type !== "image" || !("dataURL" in el)) {
+      return el;
+    }
+    const { dataURL, mimeType, ...rest } = el;
+    const fileId = rest.fileId ?? rest.id;
+    if (!isDataURL(dataURL) || !isImageMimeType(mimeType) || !isFileId(fileId)) {
+      throw new Error(`image ${String(rest.id)} needs a data: URL, an image mimeType, and an id or fileId`);
+    }
+    files[fileId] = { id: fileId, dataURL, mimeType, created: Date.now() };
+    return { status: "saved", ...rest, fileId };
+  });
+  return { elements, files };
 }
 
 // convertToExcalidrawElements binds arrows to `start`/`end` shapes but keeps whatever geometry the
@@ -193,7 +241,8 @@ async function renderPng(
 async function render(input: RenderInput): Promise<RenderOutput> {
   try {
     if (input.kind === "skeleton") {
-      const skeleton = routeArrows(input.elements);
+      const { elements: raw, files } = extractInlineFiles(input.elements);
+      const skeleton = routeArrows(raw);
       if (!isSkeletonList(skeleton)) {
         return { ok: false, error: skeletonError(skeleton) ?? "invalid skeleton" };
       }
@@ -201,8 +250,8 @@ async function render(input: RenderInput): Promise<RenderOutput> {
       const appState: Partial<AppState> = { viewBackgroundColor: "#ffffff" };
       return {
         ok: true,
-        sceneJson: serializeAsJSON(elements, appState, {}, "local"),
-        pngBase64: await renderPng(elements, appState, {}),
+        sceneJson: serializeAsJSON(elements, appState, files, "local"),
+        pngBase64: await renderPng(elements, appState, files),
         warnings: overlapWarnings(elements),
       };
     }

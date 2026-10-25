@@ -59,6 +59,8 @@ accepts). The essentials:
   `endArrowhead`/`startArrowhead`.
 - Lines: `{"type":"line","x","y","points":[[0,0],[dx,dy]]}`.
 - Frames: `{"type":"frame","children":["id1","id2"],"name"}`.
+- Images: `{"type":"image","id","x","y","width","height","mimeType":"image/svg+xml","dataURL":"data:image/svg+xml;base64,..."}`.
+  The file is embedded in the scene. SVG stays sharp at any zoom; PNG, JPEG, GIF and WebP work too.
 - `fontFamily`: 5 Excalifont (hand-drawn, default), 3 Cascadia (code), 6 Nunito, 2 Helvetica.
 - No emoji; Excalidraw's fonts don't render them.
 
