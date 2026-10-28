@@ -61,6 +61,9 @@ accepts). The essentials:
 - Frames: `{"type":"frame","children":["id1","id2"],"name"}`.
 - Images: `{"type":"image","id","x","y","width","height","mimeType":"image/svg+xml","dataURL":"data:image/svg+xml;base64,..."}`.
   The file is embedded in the scene. SVG stays sharp at any zoom; PNG, JPEG, GIF and WebP work too.
+  The file is stored under `fileId` (default: the element's id). An open editor keeps the first
+  file it saw for a `fileId` and saves it back, so when an image's content changes, give it a new
+  `fileId` (e.g. a content hash); otherwise the old image is stretched into the new size.
 - `fontFamily`: 5 Excalifont (hand-drawn, default), 3 Cascadia (code), 6 Nunito, 2 Helvetica.
 - No emoji; Excalidraw's fonts don't render them.
 
