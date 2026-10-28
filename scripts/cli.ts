@@ -201,7 +201,7 @@ async function overwriteRefusal(name: string, force: boolean): Promise<string | 
   const seen = await readOptional(seenPath(name));
   if (seen !== sceneFingerprint(current)) {
     return (
-      `scene "${name}" changed since it was last rendered or snapshotted (probably edited by Asaf in the browser). ` +
+      `scene "${name}" changed since it was last rendered or snapshotted (probably edited by the user in the browser). ` +
       `Run "excalidraw snapshot ${name}" and look at the edits first, then render again with --force.`
     );
   }

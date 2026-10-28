@@ -270,7 +270,7 @@ async function render(input: RenderInput): Promise<RenderOutput> {
 }
 
 // ---------------------------------------------------------------------------
-// Editor (what Asaf sees in the browser)
+// Editor (what the user sees in the browser)
 // ---------------------------------------------------------------------------
 
 type LoadedScene = Awaited<ReturnType<typeof loadFromBlob>> & { mtime: number | null };
